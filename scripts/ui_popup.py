@@ -10,6 +10,8 @@ import Eto.Drawing as drawing
 DEFAULT_URL = "https://public.flourish.studio/visualisation/28056071/"
 MODE_URL = "Flourish URL"
 MODE_ANIMATED = "Animated Treemap (local)"
+JSON_VIS = "JSON (graph)"
+JSON_DATA = "JSON (data only)"
 _DIALOG = None
 
 
@@ -25,7 +27,7 @@ class WebGraphDialog(forms.Form):
         self.Resizable = True
 
         self.mode_dropdown = forms.DropDown()
-        self.mode_dropdown.DataStore = [MODE_URL, MODE_ANIMATED]
+        self.mode_dropdown.DataStore = [MODE_URL, MODE_ANIMATED, JSON_VIS, JSON_DATA]
 
         self.url_box = forms.TextBox()
         self.url_box.Text = DEFAULT_URL
@@ -81,6 +83,12 @@ class WebGraphDialog(forms.Form):
         if self._current_mode() == MODE_ANIMATED:
             self._load_local_animated_treemap()
             return
+        if self._current_mode() == JSON_VIS:
+            self._load_local_ws_treemap()
+            return
+        if self._current_mode() == JSON_DATA:
+            self._load_local_ws_data()
+            return
 
         raw_url = (self.url_box.Text or "").strip()
         if not raw_url:
@@ -111,6 +119,22 @@ class WebGraphDialog(forms.Form):
             self.status_label.Text = "Loading local animated treemap..."
         except Exception as exc:
             self.status_label.Text = "Failed to load local file: {0}".format(exc)
+
+    def _load_local_ws_treemap(self):
+        """Load D3 treemap from localhost server (listener.py); page fetches /data.json."""
+        try:
+            self.web.Url = System.Uri("http://localhost:8080/ws_treemap.html")
+            self.status_label.Text = "Loading from localhost. Start listener.py first (port 8080)."
+        except Exception as exc:
+            self.status_label.Text = "Failed to load: {0}".format(exc)
+
+    def _load_local_ws_data(self):
+        """Load data-only page from localhost server; fetches /data.json."""
+        try:
+            self.web.Url = System.Uri("http://localhost:8080/ws_data.html")
+            self.status_label.Text = "Loading from localhost. Start listener.py first (port 8080)."
+        except Exception as exc:
+            self.status_label.Text = "Failed to load: {0}".format(exc)
 
     @staticmethod
     def _normalize_flourish_url(raw_url):
@@ -150,22 +174,32 @@ class WebGraphDialog(forms.Form):
             self.status_label.Text = "Bridge event: {0}{1}".format(uri.Host, uri.Query)
 
     def _set_mode(self, mode):
-        options = [MODE_URL, MODE_ANIMATED]
+        options = [MODE_URL, MODE_ANIMATED, JSON_VIS, JSON_DATA]
         if mode not in options:
             mode = MODE_URL
         self.mode_dropdown.SelectedIndex = options.index(mode)
 
         is_url_mode = mode == MODE_URL
         self.url_box.Enabled = is_url_mode
-        self.load_button.Text = "Load URL" if is_url_mode else "Load Treemap"
         if is_url_mode:
+            self.load_button.Text = "Load URL"
             self.status_label.Text = "Paste an embed URL and click Load URL."
+        elif mode == JSON_VIS:
+            self.load_button.Text = "Load Treemap"
+            self.status_label.Text = "Local JSON treemap. Run listener.py first."
+        elif mode == JSON_DATA:
+            self.load_button.Text = "Load data"
+            self.status_label.Text = "Raw JSON from watched file. Run listener.py first."
         else:
+            self.load_button.Text = "Load Treemap"
             self.status_label.Text = "Load local animated treemap from bin folder."
 
     def _current_mode(self):
         idx = self.mode_dropdown.SelectedIndex
-        return MODE_URL if idx != 1 else MODE_ANIMATED
+        if idx == 0: return MODE_URL
+        if idx == 1: return MODE_ANIMATED
+        if idx == 2: return JSON_VIS
+        return JSON_DATA
 
 
 def show_dialog(start_mode=MODE_URL):
